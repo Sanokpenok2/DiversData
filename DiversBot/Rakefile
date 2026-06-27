@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+require 'rake'
+
+namespace :db do
+  desc 'Run database migrations'
+  task :migrate do
+    ruby 'db/migrate.rb'
+  end
+end
+
+task default: 'db:migrate'

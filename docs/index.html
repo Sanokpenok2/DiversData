@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Выбор точки на карте</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    #map { width: 100%; height: calc(100vh - 120px); }
+    .panel {
+      padding: 12px 16px;
+      background: var(--tg-theme-bg-color, #fff);
+      color: var(--tg-theme-text-color, #000);
+      border-top: 1px solid #ddd;
+    }
+    .coords { font-size: 14px; margin-bottom: 10px; color: #666; }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--tg-theme-button-color, #2481cc);
+      color: var(--tg-theme-button-text-color, #fff);
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .hint { font-size: 13px; color: #888; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="panel">
+    <p class="hint">Нажмите на карту, чтобы выбрать точку обнаружения устриц</p>
+    <p class="coords" id="coords">Точка не выбрана</p>
+    <button class="btn" id="confirm" disabled>Подтвердить точку</button>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    let selectedLat = null;
+    let selectedLng = null;
+    let marker = null;
+
+    const map = L.map('map').setView([55.0, 37.0], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(function(pos) {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        map.setView([lat, lng], 10);
+      });
+    }
+
+    map.on('click', function(e) {
+      selectedLat = e.latlng.lat;
+      selectedLng = e.latlng.lng;
+
+      if (marker) {
+        marker.setLatLng(e.latlng);
+      } else {
+        marker = L.marker(e.latlng).addTo(map);
+      }
+
+      document.getElementById('coords').textContent =
+        'Широта: ' + selectedLat.toFixed(6) + ', Долгота: ' + selectedLng.toFixed(6);
+      document.getElementById('confirm').disabled = false;
+    });
+
+    document.getElementById('confirm').addEventListener('click', function() {
+      if (selectedLat === null || selectedLng === null) return;
+
+      tg.sendData(JSON.stringify({
+        lat: selectedLat,
+        lng: selectedLng
+      }));
+    });
+  </script>
+</body>
+</html>
