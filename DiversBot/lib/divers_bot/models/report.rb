@@ -16,7 +16,7 @@ module DiversBot
           telegram_username: user.username,
           telegram_first_name: user.first_name,
           telegram_last_name: user.last_name,
-          observation_date: draft.fetch('observation_date'),
+          observation_date: parse_observation_date(draft.fetch('observation_date')),
           location_type: draft.fetch('location_type'),
           latitude: draft['latitude'],
           longitude: draft['longitude'],
@@ -43,6 +43,12 @@ module DiversBot
         end
 
         report
+      end
+
+      def self.parse_observation_date(value)
+        return value if value.is_a?(Date)
+
+        Date.parse(value.to_s)
       end
     end
   end

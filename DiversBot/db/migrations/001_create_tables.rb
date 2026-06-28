@@ -31,11 +31,11 @@ Sequel.migration do
       String :status, null: false, default: 'submitted'
       DateTime :created_at, null: false
       DateTime :updated_at, null: false
-    end
 
-    create_index :reports, :telegram_user_id
-    create_index :reports, :observation_date
-    create_index :reports, :created_at
+      index :telegram_user_id
+      index :observation_date
+      index :created_at
+    end
 
     create_table(:report_photos) do
       primary_key :id
@@ -44,8 +44,8 @@ Sequel.migration do
       String :photo_type, null: false
       String :caption, text: true
       DateTime :created_at, null: false
-    end
 
-    create_index :report_photos, :report_id
+      index :report_id
+    end
   end
 end

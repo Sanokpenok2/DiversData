@@ -10,14 +10,14 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-    #map { width: 100%; height: calc(100vh - 130px); }
+    #map { width: 100%; height: calc(100vh - 180px); }
     .panel {
       padding: 12px 16px;
       background: var(--tg-theme-bg-color, #fff);
       color: var(--tg-theme-text-color, #000);
       border-top: 1px solid #ddd;
     }
-    .coords { font-size: 14px; margin-bottom: 10px; color: #666; }
+    .coords { font-size: 14px; margin-bottom: 10px; color: #666; word-break: break-word; }
     .coords.error { color: #c0392b; }
     .btn {
       width: 100%;
@@ -29,10 +29,25 @@
       cursor: pointer;
       background: var(--tg-theme-button-color, #2481cc);
       color: var(--tg-theme-button-text-color, #fff);
+      margin-bottom: 8px;
+    }
+    .btn.secondary {
+      background: #eef3f8;
+      color: #1a5276;
     }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .hint { font-size: 13px; color: #888; margin-bottom: 4px; }
     .region { font-size: 12px; color: #aaa; margin-bottom: 8px; }
+    .browser-note {
+      font-size: 12px;
+      color: #555;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
@@ -40,14 +55,29 @@
   <div class="panel">
     <p class="hint">Нажмите на карту, чтобы выбрать точку обнаружения устриц</p>
     <p class="region">Доступный регион: Крым, Чёрное и Азовское моря</p>
+    <p id="browserNote" class="browser-note hidden">
+      Режим браузера: скопируйте координаты и отправьте их боту сообщением (шаг «Координаты»).
+    </p>
     <p class="coords" id="coords">Точка не выбрана</p>
     <button class="btn" id="confirm" disabled>Подтвердить точку</button>
+    <button class="btn secondary hidden" id="copy" disabled>Скопировать координаты</button>
   </div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+    const params = new URLSearchParams(window.location.search);
+    const forceBrowser = params.get('browser') === '1';
+    const tg = window.Telegram && window.Telegram.WebApp;
+    const inTelegram = !!(tg && tg.initData && !forceBrowser);
+    const browserMode = !inTelegram;
+
+    if (inTelegram) {
+      tg.ready();
+      tg.expand();
+    } else {
+      document.getElementById('browserNote').classList.remove('hidden');
+      document.getElementById('copy').classList.remove('hidden');
+      document.getElementById('confirm').classList.add('hidden');
+    }
 
     const REGION = {
       minLon: 30.5,
@@ -83,7 +113,7 @@
         new ol.layer.Tile({
           source: new ol.source.XYZ({
             url: 'https://{a-d}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-            attributions: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+            attributions: '&copy; OpenStreetMap &copy; CARTO'
           })
         }),
         markerLayer
@@ -101,10 +131,15 @@
 
     const coordsEl = document.getElementById('coords');
     const confirmBtn = document.getElementById('confirm');
+    const copyBtn = document.getElementById('copy');
 
     function isInRegion(lon, lat) {
       return lon >= REGION.minLon && lon <= REGION.maxLon &&
              lat >= REGION.minLat && lat <= REGION.maxLat;
+    }
+
+    function coordsText() {
+      return selectedLat.toFixed(6) + ', ' + selectedLng.toFixed(6);
     }
 
     function setMarker(lon, lat) {
@@ -118,6 +153,7 @@
       coordsEl.textContent = message;
       coordsEl.classList.add('error');
       confirmBtn.disabled = true;
+      copyBtn.disabled = true;
       selectedLat = null;
       selectedLng = null;
       markerSource.clear();
@@ -130,6 +166,7 @@
       coordsEl.textContent = 'Широта: ' + lat.toFixed(6) + ', Долгота: ' + lon.toFixed(6);
       coordsEl.classList.remove('error');
       confirmBtn.disabled = false;
+      copyBtn.disabled = false;
     }
 
     map.on('click', function(evt) {
@@ -159,12 +196,24 @@
     }
 
     confirmBtn.addEventListener('click', function() {
-      if (selectedLat === null || selectedLng === null) return;
+      if (selectedLat === null || selectedLng === null || !inTelegram) return;
 
       tg.sendData(JSON.stringify({
         lat: selectedLat,
         lng: selectedLng
       }));
+    });
+
+    copyBtn.addEventListener('click', async function() {
+      if (selectedLat === null || selectedLng === null) return;
+
+      const text = coordsText();
+      try {
+        await navigator.clipboard.writeText(text);
+        copyBtn.textContent = 'Скопировано! Вставьте в бота';
+      } catch (e) {
+        copyBtn.textContent = text;
+      }
     });
   </script>
 </body>

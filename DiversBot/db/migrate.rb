@@ -1,8 +1,15 @@
 # frozen_string_literal: true
 
-require_relative '../config/boot'
+require 'bundler/setup'
+require 'dotenv/load'
+require 'sequel'
 
 Sequel.extension :migration
-Sequel::Migrator.run(DiversBot::Database::DB, File.expand_path('migrations', __dir__))
+
+database_url = ENV.fetch('DATABASE_URL')
+db = Sequel.connect(database_url)
+db.extension :pg_json
+
+Sequel::Migrator.run(db, File.expand_path('migrations', __dir__))
 
 puts 'Migrations completed successfully.'
