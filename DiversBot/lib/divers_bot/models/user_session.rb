@@ -8,14 +8,15 @@ module DiversBot
       STATES = %w[
         idle
         waiting_date
+        waiting_location_description
         waiting_location_choice
         waiting_map_location
         waiting_coordinates
-        waiting_text_location
         waiting_encounter_type
         waiting_encounter_radius
         waiting_depth
         waiting_depth_precision
+        waiting_density_description
         waiting_density_photos
         waiting_substrate_type
         waiting_substrate_photo

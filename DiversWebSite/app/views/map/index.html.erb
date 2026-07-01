@@ -24,42 +24,10 @@
         <label class="form-label">Номер на карте</label>
         <input type="number" name="report_id" min="1" class="form-control form-control-sm" value="<%= @filters[:report_id] %>">
       </div>
-      <div class="mb-3">
-        <label class="form-label">Дата от</label>
-        <input type="date" name="date_from" class="form-control form-control-sm" value="<%= @filters[:date_from] %>">
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Дата до</label>
-        <input type="date" name="date_to" class="form-control form-control-sm" value="<%= @filters[:date_to] %>">
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Тип встречи</label>
-        <select name="encounter_type" class="form-select form-select-sm">
-          <option value="">Все</option>
-          <option value="single">Единичная</option>
-          <option value="multiple_in_radius">Множественная</option>
-        </select>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Способ указания места</label>
-        <select name="location_type" class="form-select form-select-sm">
-          <option value="">Все</option>
-          <option value="map_point">Точка на карте</option>
-          <option value="coordinates">Координаты</option>
-        </select>
-      </div>
-      <div class="row g-2 mb-3">
-        <div class="col-6">
-          <label class="form-label">Глубина от, м</label>
-          <input type="number" step="0.1" min="0" name="depth_min" class="form-control form-control-sm">
-        </div>
-        <div class="col-6">
-          <label class="form-label">Глубина до, м</label>
-          <input type="number" step="0.1" min="0" name="depth_max" class="form-control form-control-sm">
-        </div>
-      </div>
+      <%= render "shared/report_filter_fields", filters: @filters, id_prefix: "map" %>
       <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" name="favorites_only" value="1" id="favoritesOnly">
+        <input class="form-check-input" type="checkbox" name="favorites_only" value="1" id="favoritesOnly"
+               <%= "checked" if ActiveModel::Type::Boolean.new.cast(@filters[:favorites_only]) %>>
         <label class="form-check-label" for="favoritesOnly">Только избранное</label>
       </div>
       <button type="submit" class="btn btn-primary btn-sm w-100">Применить</button>

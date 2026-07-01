@@ -5,13 +5,24 @@ require 'max_bot_api'
 module DiversBot
   module Services
     class Conversation
-      CANCEL_COMMANDS = %w[/cancel отмена].freeze
+      CANCEL_COMMANDS = %w[/cancel отмена выйти].freeze
       SKIP_COMMANDS = %w[/skip пропустить].freeze
       DONE_COMMANDS = %w[/done готово].freeze
       FINISH_COMMANDS = %w[/finish завершить].freeze
       BACK_COMMANDS = %w[/back назад].freeze
       BACK_TEXT = '⬅️ Назад'
-      CHANGE_LOCATION_TEXT = '📍 Изменить место'
+      EXIT_TEXT = '🚪 Выйти'
+      SKIP_COORDINATES_TEXT = '⏭ Пропустить координаты'
+      STANDARD_PHOTO_LIMIT = 3
+      ADDITIONAL_PHOTO_LIMIT = 5
+
+      SUBSTRATE_OPTIONS = {
+        '🪨 Скала' => 'Скала (цельная твёрдая поверхность – не рассыпается, нет стыков)',
+        '🪨 Валуны' => 'Валуны (крупные камни > 30 см в диаметре, видны границы между ними)',
+        '🪨 Галька' => 'Галька',
+        '🪨 Песок' => 'Песок',
+        '🏗 Искусственная' => 'Искусственная конструкция (бетон, затонувшее судно и т.д.)'
+      }.freeze
 
       def initialize(client, message)
         @client = client
@@ -73,7 +84,7 @@ module DiversBot
 
       def handle_cancel
         @session.reset!
-        reply(Messages.cancelled, reply_markup: start_keyboard)
+        reply(Messages.exited, reply_markup: start_keyboard)
       end
 
       def dispatch_state
@@ -87,22 +98,18 @@ module DiversBot
           return
         end
 
-        if change_location_requested?
-          go_to_location_choice!(clear_downstream: true)
-          return
-        end
-
         case @session.state
         when 'idle' then handle_idle
         when 'waiting_date' then handle_date
+        when 'waiting_location_description' then handle_location_description
         when 'waiting_location_choice' then handle_location_choice
         when 'waiting_map_location' then handle_map_location
         when 'waiting_coordinates' then handle_coordinates
-        when 'waiting_text_location' then handle_text_location
         when 'waiting_encounter_type' then handle_encounter_type
         when 'waiting_encounter_radius' then handle_encounter_radius
         when 'waiting_depth' then handle_depth
         when 'waiting_depth_precision' then handle_depth_precision
+        when 'waiting_density_description' then handle_density_description
         when 'waiting_density_photos' then handle_density_photos
         when 'waiting_substrate_type' then handle_substrate_type
         when 'waiting_substrate_photo' then handle_substrate_photo
@@ -120,9 +127,12 @@ module DiversBot
           @session.reset!
           reply(Messages.welcome, reply_markup: start_keyboard)
         when 'waiting_location_choice'
+          @session.transition_to!('waiting_location_description', 'location_description' => nil)
+          reply(Messages.ask_location_description, reply_markup: location_input_keyboard)
+        when 'waiting_location_description'
           @session.transition_to!('waiting_date')
           reply(Messages.ask_date, reply_markup: date_keyboard)
-        when 'waiting_map_location', 'waiting_coordinates', 'waiting_text_location'
+        when 'waiting_map_location', 'waiting_coordinates'
           go_to_location_choice!
         when 'waiting_encounter_type'
           go_to_location_choice!
@@ -140,15 +150,18 @@ module DiversBot
         when 'waiting_depth_precision'
           @session.transition_to!('waiting_depth', 'depth_is_approximate' => nil)
           reply(Messages.ask_depth, reply_markup: standard_keyboard)
-        when 'waiting_density_photos'
+        when 'waiting_density_description'
           @session.transition_to!('waiting_depth_precision')
           reply(Messages.ask_depth_precision, reply_markup: depth_precision_keyboard)
+        when 'waiting_density_photos'
+          @session.transition_to!('waiting_density_description', 'density_description' => nil)
+          reply(Messages.ask_density_description, reply_markup: standard_keyboard)
         when 'waiting_substrate_type'
           @session.transition_to!('waiting_density_photos')
           reply(Messages.ask_density_photos, reply_markup: done_keyboard)
         when 'waiting_substrate_photo'
           @session.transition_to!('waiting_substrate_type', 'substrate_type' => nil)
-          reply(Messages.ask_substrate_type, reply_markup: standard_keyboard)
+          reply(Messages.ask_substrate_type, reply_markup: substrate_type_keyboard)
         when 'waiting_additional_info'
           @session.transition_to!('waiting_substrate_photo')
           reply(Messages.ask_substrate_photo, reply_markup: skip_keyboard)
@@ -160,27 +173,13 @@ module DiversBot
         end
       end
 
-      def go_to_location_choice!(clear_downstream: false)
-        updates = {
+      def go_to_location_choice!
+        @session.transition_to!(
+          'waiting_location_choice',
           'location_type' => nil,
           'latitude' => nil,
-          'longitude' => nil,
-          'location_description' => nil
-        }
-
-        if clear_downstream
-          updates.merge!(
-            'encounter_type' => nil,
-            'encounter_radius_m' => nil,
-            'depth_m' => nil,
-            'depth_is_approximate' => nil,
-            'substrate_type' => nil,
-            'additional_info' => nil,
-            'photos' => []
-          )
-        end
-
-        @session.transition_to!('waiting_location_choice', updates)
+          'longitude' => nil
+        )
         reply(Messages.ask_location_choice, reply_markup: location_choice_keyboard)
       end
 
@@ -210,7 +209,15 @@ module DiversBot
           return
         end
 
-        @session.transition_to!('waiting_location_choice', 'observation_date' => date.iso8601)
+        @session.transition_to!('waiting_location_description', 'observation_date' => date.iso8601)
+        reply(Messages.ask_location_description, reply_markup: location_input_keyboard)
+      end
+
+      def handle_location_description
+        return reply('Опишите место обнаружения текстом.') if @text.nil? || @text.empty?
+
+        @session.transition_to!('waiting_location_choice', 'location_description' => @text)
+        reply(Messages.location_description_saved)
         reply(Messages.ask_location_choice, reply_markup: location_choice_keyboard)
       end
 
@@ -222,9 +229,8 @@ module DiversBot
         when '🌐 Координаты', 'Координаты'
           @session.transition_to!('waiting_coordinates')
           reply(Messages.ask_coordinates, reply_markup: location_input_keyboard)
-        when '📝 Описание', 'Описание'
-          @session.transition_to!('waiting_text_location')
-          reply(Messages.ask_text_location, reply_markup: location_input_keyboard)
+        when SKIP_COORDINATES_TEXT, 'Пропустить координаты'
+          finish_location_without_coordinates
         else
           reply('Выберите способ указания места с помощью кнопок.', reply_markup: location_choice_keyboard)
         end
@@ -255,16 +261,14 @@ module DiversBot
 
         send_location(lat, lon)
         save_location('coordinates', lat, lon)
-        reply(Messages.coordinates_confirmed(lat, lon))
       end
 
-      def handle_text_location
-        return reply('Опишите место обнаружения текстом.') if @text.nil? || @text.empty?
-
+      def finish_location_without_coordinates
         @session.transition_to!(
           'waiting_encounter_type',
           'location_type' => 'text_description',
-          'location_description' => @text
+          'latitude' => nil,
+          'longitude' => nil
         )
         reply(Messages.ask_encounter_type, reply_markup: encounter_type_keyboard)
       end
@@ -276,7 +280,11 @@ module DiversBot
           'latitude' => lat,
           'longitude' => lon
         )
-        reply(Messages.location_confirmed)
+        if type == 'coordinates'
+          reply(Messages.coordinates_confirmed(lat, lon))
+        else
+          reply(Messages.location_confirmed)
+        end
         reply(Messages.ask_encounter_type, reply_markup: encounter_type_keyboard)
       end
 
@@ -323,28 +331,34 @@ module DiversBot
                       end
 
         unless approximate.nil?
-          @session.transition_to!('waiting_density_photos', 'depth_is_approximate' => approximate)
-          reply(Messages.ask_density_photos, reply_markup: done_keyboard)
+          @session.transition_to!('waiting_density_description', 'depth_is_approximate' => approximate)
+          reply(Messages.ask_density_description, reply_markup: standard_keyboard)
           return
         end
 
         reply('Выберите точность глубины с помощью кнопок.', reply_markup: depth_precision_keyboard)
       end
 
+      def handle_density_description
+        return reply('Опишите плотность поселения словами.') if @text.nil? || @text.empty?
+
+        @session.transition_to!('waiting_density_photos', 'density_description' => @text)
+        reply(Messages.ask_density_photos, reply_markup: done_keyboard)
+      end
+
       def handle_density_photos
         if done_requested?
-          photos = density_photos
-          if photos.empty?
-            reply(Messages.need_density_photo, reply_markup: done_keyboard)
-            return
-          end
-
           @session.transition_to!('waiting_substrate_type')
-          reply(Messages.ask_substrate_type, reply_markup: standard_keyboard)
+          reply(Messages.ask_substrate_type, reply_markup: substrate_type_keyboard)
           return
         end
 
         if photo_message?
+          unless photo_slot_available?('density')
+            reply(Messages.photo_limit_reached(STANDARD_PHOTO_LIMIT), reply_markup: done_keyboard)
+            return
+          end
+
           token = photo_attachment_token
           source_url = @message.photo_attachment_url
           unless token || source_url
@@ -358,16 +372,23 @@ module DiversBot
             photo_type: 'density',
             caption: @message.caption
           )
-          reply(Messages.photo_added(density_photos.size), reply_markup: done_keyboard)
+          reply(
+            Messages.photo_added(density_photos.size, STANDARD_PHOTO_LIMIT),
+            reply_markup: done_keyboard
+          )
         else
-          reply(Messages.need_photo, reply_markup: done_keyboard)
+          reply('Отправьте фото или нажмите «Готово», чтобы продолжить.', reply_markup: done_keyboard)
         end
       end
 
       def handle_substrate_type
-        return reply('Опишите тип субстрата.', reply_markup: standard_keyboard) if @text.nil? || @text.empty?
+        substrate = resolve_substrate_type(@text)
+        unless substrate
+          reply('Выберите тип субстрата с помощью кнопок.', reply_markup: substrate_type_keyboard)
+          return
+        end
 
-        @session.transition_to!('waiting_substrate_photo', 'substrate_type' => @text)
+        @session.transition_to!('waiting_substrate_photo', 'substrate_type' => substrate)
         reply(Messages.ask_substrate_photo, reply_markup: skip_keyboard)
       end
 
@@ -379,6 +400,11 @@ module DiversBot
         end
 
         if photo_message?
+          if substrate_photos.any?
+            reply(Messages.photo_limit_reached(1, done_label: 'Пропустить'), reply_markup: skip_keyboard)
+            return
+          end
+
           token = photo_attachment_token
           source_url = @message.photo_attachment_url
           unless token || source_url
@@ -418,6 +444,14 @@ module DiversBot
         end
 
         if photo_message?
+          unless photo_slot_available?('additional')
+            reply(
+              Messages.photo_limit_reached(ADDITIONAL_PHOTO_LIMIT, done_label: 'Завершить отчёт'),
+              reply_markup: finish_keyboard
+            )
+            return
+          end
+
           token = photo_attachment_token
           source_url = @message.photo_attachment_url
           unless token || source_url
@@ -431,7 +465,10 @@ module DiversBot
             photo_type: 'additional',
             caption: @message.caption
           )
-          reply(Messages.extra_photo_added(additional_photos.size), reply_markup: finish_keyboard)
+          reply(
+            Messages.extra_photo_added(additional_photos.size, ADDITIONAL_PHOTO_LIMIT),
+            reply_markup: finish_keyboard
+          )
         else
           reply('Отправьте фото или нажмите «Завершить отчёт».', reply_markup: finish_keyboard)
         end
@@ -441,8 +478,9 @@ module DiversBot
         draft = @session.draft_data
         report = Models::Report.create_from_draft!(@user, draft)
         @session.reset!
-        reply(Services::ReportSummary.text(report), format: 'markdown', reply_markup: start_keyboard)
+        reply(Services::ReportSummary.text(report), format: 'markdown')
         send_report_photos(report)
+        reply(Messages.report_saved_footer, reply_markup: start_keyboard)
       end
 
       def send_report_photos(report)
@@ -461,6 +499,19 @@ module DiversBot
         rescue StandardError => e
           warn "[WARN] Failed to send photo for report ##{report.id}: #{e.message}"
         end
+      end
+
+      def resolve_substrate_type(text)
+        return nil if text.nil? || text.empty?
+
+        return SUBSTRATE_OPTIONS[text] if SUBSTRATE_OPTIONS.key?(text)
+
+        short_label = text.sub(/^\S+\s+/, '')
+        SUBSTRATE_OPTIONS.each do |label, value|
+          return value if label.sub(/^\S+\s+/, '') == short_label
+        end
+
+        nil
       end
 
       def draft
@@ -486,15 +537,11 @@ module DiversBot
       end
 
       def cancel_requested?
-        CANCEL_COMMANDS.include?(@text&.downcase) || @text&.start_with?('❌ Отмена')
+        CANCEL_COMMANDS.include?(@text&.downcase) || @text == EXIT_TEXT || @text&.start_with?('🚪 Выйти')
       end
 
       def back_requested?
         BACK_COMMANDS.include?(@text&.downcase) || @text == BACK_TEXT
-      end
-
-      def change_location_requested?
-        @text == CHANGE_LOCATION_TEXT
       end
 
       def photo_message?
@@ -506,11 +553,24 @@ module DiversBot
       end
 
       def density_photos
-        Array(@session.draft_data['photos']).select { |p| p['photo_type'] == 'density' }
+        photos_of_type('density')
+      end
+
+      def substrate_photos
+        photos_of_type('substrate')
       end
 
       def additional_photos
-        Array(@session.draft_data['photos']).select { |p| p['photo_type'] == 'additional' }
+        photos_of_type('additional')
+      end
+
+      def photos_of_type(type)
+        Array(@session.draft_data['photos']).select { |p| p['photo_type'] == type }
+      end
+
+      def photo_slot_available?(type)
+        limit = type == 'additional' ? ADDITIONAL_PHOTO_LIMIT : STANDARD_PHOTO_LIMIT
+        photos_of_type(type).size < limit
       end
 
       def delete_chat_messages(message_ids)
@@ -600,7 +660,7 @@ module DiversBot
 
       # --- keyboards (MAX inline) ---
 
-      def build_keyboard(main_rows, back: true, change_location: false)
+      def build_keyboard(main_rows, back: true)
         kb = @client.messages.new_keyboard_builder
 
         main_rows.each do |row_texts|
@@ -610,8 +670,7 @@ module DiversBot
 
         nav = []
         nav << BACK_TEXT if back
-        nav << CHANGE_LOCATION_TEXT if change_location
-        nav << '❌ Отмена (/cancel)'
+        nav << EXIT_TEXT
 
         row = kb.add_row
         nav.each { |label| row.add_message(label) }
@@ -625,7 +684,7 @@ module DiversBot
       end
 
       def date_keyboard
-        build_keyboard([], back: true, change_location: false)
+        build_keyboard([], back: true)
       end
 
       def location_choice_keyboard
@@ -633,10 +692,9 @@ module DiversBot
           [
             ['📍 Геопозиция'],
             ['🌐 Координаты'],
-            ['📝 Описание']
+            [SKIP_COORDINATES_TEXT]
           ],
-          back: true,
-          change_location: false
+          back: true
         )
       end
 
@@ -646,12 +704,12 @@ module DiversBot
         add_geo_button(row, '📍 Отправить геопозицию')
         row = kb.add_row
         row.add_message(BACK_TEXT)
-        row.add_message('❌ Отмена (/cancel)')
+        row.add_message(EXIT_TEXT)
         kb
       end
 
       def location_input_keyboard
-        build_keyboard([], back: true, change_location: false)
+        build_keyboard([], back: true)
       end
 
       def add_geo_button(row, text)
@@ -664,13 +722,12 @@ module DiversBot
             ['🔹 Единичная встреча'],
             ['🔸 Множественная встреча']
           ],
-          back: true,
-          change_location: true
+          back: true
         )
       end
 
       def standard_keyboard
-        build_keyboard([], back: true, change_location: true)
+        build_keyboard([], back: true)
       end
 
       def depth_precision_keyboard
@@ -679,21 +736,33 @@ module DiversBot
             ['📐 Приблизительная'],
             ['🎯 Точная']
           ],
-          back: true,
-          change_location: true
+          back: true
         )
       end
 
       def done_keyboard
-        build_keyboard([['✅ Готово']], back: true, change_location: true)
+        build_keyboard([['✅ Готово']], back: true)
       end
 
       def skip_keyboard
-        build_keyboard([['⏭ Пропустить']], back: true, change_location: true)
+        build_keyboard([['⏭ Пропустить']], back: true)
       end
 
       def finish_keyboard
-        build_keyboard([['🏁 Завершить отчёт']], back: true, change_location: true)
+        build_keyboard([['🏁 Завершить отчёт']], back: true)
+      end
+
+      def substrate_type_keyboard
+        build_keyboard(
+          [
+            ['🪨 Скала'],
+            ['🪨 Валуны'],
+            ['🪨 Галька'],
+            ['🪨 Песок'],
+            ['🏗 Искусственная']
+          ],
+          back: true
+        )
       end
     end
   end

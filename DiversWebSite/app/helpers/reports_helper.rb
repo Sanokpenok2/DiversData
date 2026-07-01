@@ -8,4 +8,14 @@ module ReportsHelper
   rescue StandardError
     PHOTO_PLACEHOLDER
   end
+
+  def reports_index_query_params(overrides = {})
+    query = request.query_parameters.deep_dup
+    overrides.each { |key, value| query[key.to_s] = value }
+    query.compact
+  end
+
+  def reports_index_path_with(query_overrides = {})
+    reports_path(reports_index_query_params(query_overrides))
+  end
 end

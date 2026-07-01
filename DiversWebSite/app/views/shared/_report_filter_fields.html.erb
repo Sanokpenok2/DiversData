@@ -1,0 +1,50 @@
+<% filters = local_assigns.fetch(:filters, {}) %>
+<% id_prefix = local_assigns.fetch(:id_prefix, "filter") %>
+
+<div class="mb-3">
+  <label class="form-label" for="<%= id_prefix %>_date_from">Дата от</label>
+  <input type="date" name="date_from" id="<%= id_prefix %>_date_from" class="form-control form-control-sm"
+         value="<%= filters[:date_from] %>">
+</div>
+<div class="mb-3">
+  <label class="form-label" for="<%= id_prefix %>_date_to">Дата до</label>
+  <input type="date" name="date_to" id="<%= id_prefix %>_date_to" class="form-control form-control-sm"
+         value="<%= filters[:date_to] %>">
+</div>
+<div class="mb-3">
+  <label class="form-label" for="<%= id_prefix %>_encounter_type">Тип встречи</label>
+  <select name="encounter_type" id="<%= id_prefix %>_encounter_type" class="form-select form-select-sm">
+    <option value="">Все</option>
+    <option value="single" <%= "selected" if filters[:encounter_type] == "single" %>>Единичная</option>
+    <option value="multiple_in_radius" <%= "selected" if filters[:encounter_type] == "multiple_in_radius" %>>Множественная</option>
+  </select>
+</div>
+<div class="mb-3">
+  <label class="form-label" for="<%= id_prefix %>_substrate_type">Тип субстрата</label>
+  <select name="substrate_type" id="<%= id_prefix %>_substrate_type" class="form-select form-select-sm">
+    <option value="">Все</option>
+    <% Report::SUBSTRATE_TYPES.each do |substrate_type| %>
+      <option value="<%= substrate_type %>" <%= "selected" if filters[:substrate_type] == substrate_type %>>
+        <%= substrate_type.sub(/\s*\(.*/, "") %>
+      </option>
+    <% end %>
+  </select>
+</div>
+<div class="row g-2 mb-3">
+  <div class="col-6">
+    <label class="form-label" for="<%= id_prefix %>_depth_min">Глубина от, м</label>
+    <input type="number" step="0.1" min="0" name="depth_min" id="<%= id_prefix %>_depth_min"
+           class="form-control form-control-sm" value="<%= filters[:depth_min] %>">
+  </div>
+  <div class="col-6">
+    <label class="form-label" for="<%= id_prefix %>_depth_max">Глубина до, м</label>
+    <input type="number" step="0.1" min="0" name="depth_max" id="<%= id_prefix %>_depth_max"
+           class="form-control form-control-sm" value="<%= filters[:depth_max] %>">
+  </div>
+</div>
+<div class="form-check mb-3">
+  <input class="form-check-input" type="checkbox" name="depth_exact" value="1"
+         id="<%= id_prefix %>_depth_exact"
+         <%= "checked" if ActiveModel::Type::Boolean.new.cast(filters[:depth_exact]) %>>
+  <label class="form-check-label" for="<%= id_prefix %>_depth_exact">Точная глубина</label>
+</div>

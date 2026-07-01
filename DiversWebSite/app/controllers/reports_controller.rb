@@ -1,16 +1,34 @@
 # frozen_string_literal: true
 
 class ReportsController < ApplicationController
+  include ReportFilters
+
   before_action :require_login
   before_action :set_report, only: :show
+
+  def index
+    @filters = applied_report_filters
+    @sort = report_sort_param
+    scope = Report.submitted.filtered(@filters).sorted_by(@sort).includes(:photos)
+
+    if ActiveModel::Type::Boolean.new.cast(@filters[:favorites_only])
+      favorite_ids = current_scientist.favorites.pluck(:report_id)
+      scope = scope.where(id: favorite_ids.presence || [0])
+    end
+
+    total_count = scope.count
+    @pagination = ReportListPagination.new(
+      page: params[:page],
+      per_page: params[:per_page],
+      total: total_count
+    )
+    @per_page = @pagination.per_page
+    @reports = scope.offset(@pagination.offset).limit(@pagination.per_page)
+  end
 
   def show
     @favorite = current_scientist.favorites.find_by(report_id: @report.id)
     @pending_deletion = @report.pending_deletion_request?
-  end
-
-  def descriptions
-    @reports = Report.text_description.includes(:photos).recent_first.limit(500)
   end
 
   def lookup
@@ -34,6 +52,11 @@ class ReportsController < ApplicationController
   end
 
   private
+
+  def report_sort_param
+    sort = params[:sort].to_s
+    Report::SORT_OPTIONS.key?(sort) ? sort : Report::DEFAULT_SORT
+  end
 
   def set_report
     @report = Report.submitted.find(params[:id])

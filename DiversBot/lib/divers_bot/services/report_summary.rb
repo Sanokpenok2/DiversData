@@ -39,14 +39,12 @@ module DiversBot
         lines << "   #{format_location(report)}"
         lines << "🔍 Тип встречи: #{format_encounter(report)}"
         lines << "🌊 Глубина: #{format_depth(report)}"
+        lines << "📊 Плотность поселения: #{report.density_description || '—'}"
         lines << "🪨 Субстрат: #{report.substrate_type}"
         lines << "ℹ️ Доп. информация: #{report.additional_info || 'не указана'}"
         lines << ''
         lines << '📷 Фотографии:'
         lines << format_photos_list(photos)
-        lines << ''
-        lines << 'Спасибо за участие в сборе данных!'
-        lines << 'Новый отчёт: /start'
 
         lines.join("\n")
       end
@@ -62,18 +60,19 @@ module DiversBot
       end
 
       def format_location(report)
+        parts = []
+        parts << report.location_description if report.location_description && !report.location_description.strip.empty?
+
         case report.location_type
-        when 'text_description'
-          report.location_description || '—'
         when 'map_point', 'coordinates'
           if report.latitude && report.longitude
-            "широта #{report.latitude.round(6)}, долгота #{report.longitude.round(6)}"
-          else
-            report.location_description || '—'
+            parts << "широта #{report.latitude.round(6)}, долгота #{report.longitude.round(6)}"
           end
-        else
-          report.location_description || '—'
         end
+
+        return parts.join("\n   ") unless parts.empty?
+
+        '—'
       end
 
       def format_encounter(report)

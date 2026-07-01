@@ -1,13 +1,14 @@
 # frozen_string_literal: true
 
 class MapController < ApplicationController
+  include ReportFilters
+
   def index
-    @filters = default_filters
-    @filters[:report_id] = params[:report_id].to_s if params[:report_id].present?
+    @filters = applied_report_filters(report_id: params[:report_id].to_s)
   end
 
   def reports
-    scope = Report.submitted.with_coordinates.filtered(filter_params)
+    scope = Report.submitted.with_coordinates.filtered(report_filter_params)
     favorite_ids = current_scientist_favorite_ids
 
     if ActiveModel::Type::Boolean.new.cast(params[:favorites_only])
@@ -20,24 +21,6 @@ class MapController < ApplicationController
   end
 
   private
-
-  def default_filters
-    {
-      date_from: "",
-      date_to: "",
-      encounter_type: "",
-      location_type: "",
-      depth_min: "",
-      depth_max: "",
-      favorites_only: "0",
-      report_id: ""
-    }
-  end
-
-  def filter_params
-    params.permit(:date_from, :date_to, :encounter_type, :location_type, :depth_min, :depth_max,
-                  :favorites_only, :report_id)
-  end
 
   def current_scientist_favorite_ids
     return [] unless logged_in?

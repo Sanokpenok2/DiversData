@@ -75,6 +75,8 @@ module DiversBot
         warn e.backtrace.first(5).join("\n")
         notify_error(update)
       end
+    rescue Interrupt
+      puts "\nБот остановлен."
     end
 
     def self.notify_error(update)

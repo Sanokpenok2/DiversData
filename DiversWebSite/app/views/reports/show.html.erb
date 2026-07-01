@@ -13,9 +13,7 @@
     </div>
     <div class="d-flex gap-2 flex-wrap">
       <%= link_to "← К карте", root_path, class: "btn btn-outline-secondary btn-sm" %>
-      <% if @report.location_type == "text_description" %>
-        <%= link_to "К описаниям", descriptions_reports_path, class: "btn btn-outline-secondary btn-sm" %>
-      <% end %>
+      <%= link_to "← К списку", reports_path, class: "btn btn-outline-secondary btn-sm" %>
       <% if @favorite %>
         <%= button_to "Убрать из избранного", favorite_report_path(@report), method: :delete, class: "btn btn-warning btn-sm" %>
       <% else %>
@@ -46,6 +44,11 @@
 
       <dt class="col-sm-3">Глубина</dt>
       <dd class="col-sm-9"><%= @report.depth_label %></dd>
+
+      <% if @report.density_description.present? %>
+        <dt class="col-sm-3">Плотность</dt>
+        <dd class="col-sm-9"><%= @report.density_description %></dd>
+      <% end %>
 
       <dt class="col-sm-3">Субстрат</dt>
       <dd class="col-sm-9"><%= @report.substrate_type %></dd>

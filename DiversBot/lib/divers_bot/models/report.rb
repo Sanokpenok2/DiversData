@@ -26,6 +26,7 @@ module DiversBot
           depth_m: draft.fetch('depth_m'),
           depth_is_approximate: draft.fetch('depth_is_approximate', true),
           substrate_type: draft.fetch('substrate_type'),
+          density_description: draft.fetch('density_description'),
           additional_info: draft['additional_info'],
           status: 'submitted',
           created_at: Time.now,

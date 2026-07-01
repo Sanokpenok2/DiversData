@@ -1,0 +1,130 @@
+<% content_for :title, "Все отчёты" %>
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+      <h1 class="h3 mb-1">Все отчёты</h1>
+      <p class="text-muted mb-0">Список всех сохранённых отчётов дайверов</p>
+    </div>
+    <%= link_to "← К карте", root_path, class: "btn btn-outline-secondary btn-sm" %>
+  </div>
+
+  <div class="report-card mb-4">
+    <h2 class="h6 mb-3">Фильтры</h2>
+    <%= form_with url: reports_path, method: :get, local: true, class: "row g-3 align-items-end" do %>
+      <div class="col-md-3">
+        <label class="form-label" for="reports_date_from">Дата от</label>
+        <input type="date" name="date_from" id="reports_date_from" class="form-control form-control-sm"
+               value="<%= @filters[:date_from] %>">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="reports_date_to">Дата до</label>
+        <input type="date" name="date_to" id="reports_date_to" class="form-control form-control-sm"
+               value="<%= @filters[:date_to] %>">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="reports_encounter_type">Тип встречи</label>
+        <select name="encounter_type" id="reports_encounter_type" class="form-select form-select-sm">
+          <option value="">Все</option>
+          <option value="single" <%= "selected" if @filters[:encounter_type] == "single" %>>Единичная</option>
+          <option value="multiple_in_radius" <%= "selected" if @filters[:encounter_type] == "multiple_in_radius" %>>Множественная</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label" for="reports_substrate_type">Тип субстрата</label>
+        <select name="substrate_type" id="reports_substrate_type" class="form-select form-select-sm">
+          <option value="">Все</option>
+          <% Report::SUBSTRATE_TYPES.each do |substrate_type| %>
+            <option value="<%= substrate_type %>" <%= "selected" if @filters[:substrate_type] == substrate_type %>>
+              <%= substrate_type.sub(/\s*\(.*/, "") %>
+            </option>
+          <% end %>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="reports_depth_min">Глубина от, м</label>
+        <input type="number" step="0.1" min="0" name="depth_min" id="reports_depth_min"
+               class="form-control form-control-sm" value="<%= @filters[:depth_min] %>">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="reports_depth_max">Глубина до, м</label>
+        <input type="number" step="0.1" min="0" name="depth_max" id="reports_depth_max"
+               class="form-control form-control-sm" value="<%= @filters[:depth_max] %>">
+      </div>
+      <div class="col-md-3">
+        <div class="form-check mt-4">
+          <input class="form-check-input" type="checkbox" name="depth_exact" value="1" id="reports_depth_exact"
+                 <%= "checked" if ActiveModel::Type::Boolean.new.cast(@filters[:depth_exact]) %>>
+          <label class="form-check-label" for="reports_depth_exact">Точная глубина</label>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="reports_sort">Сортировка</label>
+        <select name="sort" id="reports_sort" class="form-select form-select-sm">
+          <% Report::SORT_OPTIONS.each do |value, label| %>
+            <option value="<%= value %>" <%= "selected" if @sort == value %>><%= label %></option>
+          <% end %>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label" for="reports_per_page">На странице</label>
+        <select name="per_page" id="reports_per_page" class="form-select form-select-sm">
+          <% ReportListPagination::PER_PAGE_OPTIONS.each do |per_page| %>
+            <option value="<%= per_page %>" <%= "selected" if @per_page == per_page %>><%= per_page %></option>
+          <% end %>
+        </select>
+      </div>
+      <div class="col-md-3 d-flex gap-2">
+        <button type="submit" class="btn btn-primary btn-sm">Применить</button>
+        <%= link_to "Сбросить", reports_path, class: "btn btn-outline-secondary btn-sm" %>
+      </div>
+    <% end %>
+  </div>
+
+  <% if @pagination.total.positive? %>
+    <p class="text-muted small mb-3">
+      Показано <%= @pagination.showing_from %>–<%= @pagination.showing_to %> из <%= @pagination.total %> ·
+      сортировка: <%= Report::SORT_OPTIONS[@sort] %> ·
+      по <%= @per_page %> на странице
+    </p>
+  <% end %>
+
+  <% if @reports.any? %>
+    <div class="list-group favorites-list shadow-sm">
+      <% @reports.each do |report| %>
+        <div class="list-group-item list-group-item-action d-flex justify-content-between align-items-start gap-3 py-3">
+          <div>
+            <div class="fw-semibold">
+              <%= link_to "Отчёт ##{report.id}", report_path(report), class: "text-decoration-none" %>
+              <% if report.mappable? %>
+                <span class="badge text-bg-light border ms-1">на карте</span>
+              <% end %>
+            </div>
+            <div class="small text-muted">
+              <%= report.observation_date.strftime("%d.%m.%Y") %> ·
+              <%= report.reporter_name %> ·
+              <%= report.encounter_label %> ·
+              <%= report.depth_label %> ·
+              <%= report.substrate_short_label %>
+            </div>
+            <div class="small mt-1 text-body-secondary"><%= report.coordinates_label %></div>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
+            <% if report.photos.any? %>
+              <span class="badge text-bg-light border"><i class="bi bi-image"></i> <%= report.photos.size %></span>
+            <% end %>
+            <%= link_to "Открыть", report_path(report), class: "btn btn-outline-primary btn-sm" %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+
+    <%= render "pagination", pagination: @pagination if @pagination.total_pages > 1 %>
+  <% elsif @pagination.total.zero? %>
+    <div class="report-card text-center py-5">
+      <p class="text-muted mb-3">Отчёты не найдены. Попробуйте изменить фильтры.</p>
+      <%= link_to "Сбросить фильтры", reports_path, class: "btn btn-outline-secondary me-2" %>
+      <%= link_to "Перейти к карте", root_path, class: "btn btn-primary" %>
+    </div>
+  <% end %>
+</div>

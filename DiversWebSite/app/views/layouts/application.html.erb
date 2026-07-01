@@ -25,7 +25,7 @@
           <div class="collapse navbar-collapse" id="mainNav">
             <ul class="navbar-nav me-auto mb-2 mb-lg-0">
               <li class="nav-item"><%= link_to "Карта", root_path, class: "nav-link #{'active' if controller_name == 'map'}" %></li>
-              <li class="nav-item"><%= link_to "По описанию", descriptions_reports_path, class: "nav-link #{'active' if action_name == 'descriptions'}" %></li>
+              <li class="nav-item"><%= link_to "Все отчёты", reports_path, class: "nav-link #{'active' if controller_name == 'reports' && action_name == 'index'}" %></li>
               <li class="nav-item"><%= link_to "Избранное", favorites_path, class: "nav-link #{'active' if controller_name == 'favorites'}" %></li>
               <% if admin? %>
                 <li class="nav-item"><%= link_to "Удаления", admin_report_deletion_requests_path, class: "nav-link #{'active' if controller_name == 'report_deletion_requests'}" %></li>

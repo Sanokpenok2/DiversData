@@ -7,11 +7,7 @@ Rails.application.routes.draw do
 
   get "reports/lookup", to: "reports#lookup", as: :report_lookup
 
-  resources :reports, only: %i[show] do
-    collection do
-      get :descriptions
-    end
-
+  resources :reports, only: %i[index show] do
     resources :report_deletion_requests, only: [:create]
   end
   resources :report_photos, only: [:show]
