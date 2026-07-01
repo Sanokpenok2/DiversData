@@ -26,7 +26,13 @@ module DiversBot
         photos = Array(report.photos)
 
         lines = []
-        lines << "✅ Отчёт ##{report.id} успешно сохранён!"
+        lines << '✅ *Отчёт успешно сохранён!*'
+        lines << ''
+        lines << "🔢 *Номер отчёта: #{report.id}*"
+        lines << 'Сохраните или передайте этот номер учёному — по нему отчёт можно найти на сайте DiversData.'
+        if (site_url = scientist_site_url)
+          lines << "🌐 Сайт: #{site_url}"
+        end
         lines << ''
         lines << "📅 Дата наблюдения: #{format_date(report.observation_date)}"
         lines << "📍 Место (#{location_label(report.location_type)}):"
@@ -119,6 +125,13 @@ module DiversBot
         return value.to_i.to_s if value == value.to_i
 
         value.to_s
+      end
+
+      def scientist_site_url
+        url = ENV['SCIENTIST_WEB_URL']
+        return nil if url.nil? || url.strip.empty?
+
+        url.strip
       end
     end
   end

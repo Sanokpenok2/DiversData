@@ -6,15 +6,15 @@
   <title>Выбор точки на карте</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="https://cdn.max.ru/max-web-app/max-web-app.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
     #map { width: 100%; height: calc(100vh - 180px); }
     .panel {
       padding: 12px 16px;
-      background: var(--tg-theme-bg-color, #fff);
-      color: var(--tg-theme-text-color, #000);
+      background: var(--max-theme-bg-color, #fff);
+      color: var(--max-theme-text-color, #000);
       border-top: 1px solid #ddd;
     }
     .coords { font-size: 14px; margin-bottom: 10px; color: #666; word-break: break-word; }
@@ -27,8 +27,8 @@
       font-size: 16px;
       font-weight: 600;
       cursor: pointer;
-      background: var(--tg-theme-button-color, #2481cc);
-      color: var(--tg-theme-button-text-color, #fff);
+      background: var(--max-theme-button-color, #2481cc);
+      color: var(--max-theme-button-text-color, #fff);
       margin-bottom: 8px;
     }
     .btn.secondary {
@@ -66,13 +66,13 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const forceBrowser = params.get('browser') === '1';
-    const tg = window.Telegram && window.Telegram.WebApp;
-    const inTelegram = !!(tg && tg.initData && !forceBrowser);
-    const browserMode = !inTelegram;
+    const webApp = window.WebApp;
+    const inMessenger = !!(webApp && webApp.initData && !forceBrowser);
+    const browserMode = !inMessenger;
 
-    if (inTelegram) {
-      tg.ready();
-      tg.expand();
+    if (inMessenger) {
+      if (typeof webApp.ready === 'function') webApp.ready();
+      if (typeof webApp.expand === 'function') webApp.expand();
     } else {
       document.getElementById('browserNote').classList.remove('hidden');
       document.getElementById('copy').classList.remove('hidden');
@@ -196,12 +196,14 @@
     }
 
     confirmBtn.addEventListener('click', function() {
-      if (selectedLat === null || selectedLng === null || !inTelegram) return;
+      if (selectedLat === null || selectedLng === null || !inMessenger) return;
 
-      tg.sendData(JSON.stringify({
-        lat: selectedLat,
-        lng: selectedLng
-      }));
+      const payload = JSON.stringify({ lat: selectedLat, lng: selectedLng });
+      if (typeof webApp.sendData === 'function') {
+        webApp.sendData(payload);
+      } else if (typeof webApp.close === 'function') {
+        webApp.close(payload);
+      }
     });
 
     copyBtn.addEventListener('click', async function() {

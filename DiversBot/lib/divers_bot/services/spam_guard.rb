@@ -23,7 +23,7 @@ module DiversBot
 
       def allow_new_report?
         today_start = Time.now.utc.beginning_of_day
-        count = Models::Report.where(telegram_user_id: @user_id)
+        count = Models::Report.where(max_user_id: @user_id)
                               .where { created_at >= today_start }
                               .count
         count < @max_reports_per_day
@@ -51,11 +51,5 @@ module DiversBot
         @message_timestamps.select! { |timestamp| timestamp >= cutoff }
       end
     end
-  end
-end
-
-class Time
-  def beginning_of_day
-    Time.new(year, month, day, 0, 0, 0, utc? ? 0 : utc_offset)
   end
 end

@@ -1,0 +1,38 @@
+<% content_for :title, "Пользователи" %>
+
+<div class="container py-4">
+  <h1 class="h3 mb-4">Пользователи</h1>
+
+  <div class="table-responsive report-card p-0">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Имя</th>
+          <th>Email</th>
+          <th>Роль</th>
+          <th>Зарегистрирован</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @scientists.each do |scientist| %>
+          <tr>
+            <td><%= scientist.name %></td>
+            <td><%= scientist.email %></td>
+            <td><%= role_label(scientist) %></td>
+            <td class="small"><%= scientist.created_at.strftime("%d.%m.%Y") %></td>
+            <td class="text-end">
+              <% unless scientist.id == current_scientist.id %>
+                <%= button_to "Удалить", admin_scientist_path(scientist), method: :delete,
+                              class: "btn btn-outline-danger btn-sm",
+                              form: { data: { turbo_confirm: "Удалить аккаунт #{scientist.name}?" } } %>
+              <% else %>
+                <span class="text-muted small">Это вы</span>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+</div>

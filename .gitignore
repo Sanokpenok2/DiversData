@@ -4,3 +4,6 @@ tmp/
 .bundle/
 vendor/bundle/
 DiversBot/.env
+DiversWebSite/.env
+storage/report_photos/*
+!storage/report_photos/.keep

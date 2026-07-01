@@ -1,0 +1,150 @@
+<% content_for :title, "Отчёт ##{@report.id}" %>
+
+<% photo_data = @report.photos.map do |photo|
+     { url: report_photo_path(photo), title: photo.type_label, caption: photo.caption.to_s }
+   end %>
+
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+      <span class="badge text-bg-primary fs-6 mb-2">№ <%= @report.id %></span>
+      <h1 class="h3 mb-1">Отчёт #<%= @report.id %></h1>
+      <p class="text-muted mb-0"><%= @report.observation_date.strftime("%d.%m.%Y") %> · <%= @report.reporter_name %></p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <%= link_to "← К карте", root_path, class: "btn btn-outline-secondary btn-sm" %>
+      <% if @report.location_type == "text_description" %>
+        <%= link_to "К описаниям", descriptions_reports_path, class: "btn btn-outline-secondary btn-sm" %>
+      <% end %>
+      <% if @favorite %>
+        <%= button_to "Убрать из избранного", favorite_report_path(@report), method: :delete, class: "btn btn-warning btn-sm" %>
+      <% else %>
+        <%= button_to "В избранное", favorite_report_path(@report), method: :post, class: "btn btn-outline-warning btn-sm" %>
+      <% end %>
+      <% unless @pending_deletion %>
+        <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deletionRequestModal">
+          Запросить удаление
+        </button>
+      <% else %>
+        <span class="badge text-bg-warning align-self-center">Запрос на удаление на рассмотрении</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="report-card mb-4">
+    <dl class="row report-meta mb-0">
+      <dt class="col-sm-3">Место</dt>
+      <dd class="col-sm-9"><%= @report.location_label %>: <%= @report.coordinates_label %></dd>
+
+      <dt class="col-sm-3">Тип встречи</dt>
+      <dd class="col-sm-9">
+        <%= @report.encounter_label %>
+        <% if @report.encounter_type == "multiple_in_radius" && @report.encounter_radius_m %>
+          (радиус ~<%= @report.encounter_radius_m %> м)
+        <% end %>
+      </dd>
+
+      <dt class="col-sm-3">Глубина</dt>
+      <dd class="col-sm-9"><%= @report.depth_label %></dd>
+
+      <dt class="col-sm-3">Субстрат</dt>
+      <dd class="col-sm-9"><%= @report.substrate_type %></dd>
+
+      <dt class="col-sm-3">Доп. информация</dt>
+      <dd class="col-sm-9"><%= @report.additional_info.presence || "—" %></dd>
+
+      <dt class="col-sm-3">Отправлен</dt>
+      <dd class="col-sm-9"><%= @report.created_at.strftime("%d.%m.%Y %H:%M") %></dd>
+    </dl>
+  </div>
+
+  <h2 class="h5 mb-3">Фотографии (<%= @report.photos.size %>)</h2>
+
+  <% if @report.photos.any? %>
+    <%= tag.div class: "photo-grid",
+                data: {
+                  controller: "photo-lightbox",
+                  photo_lightbox_photos_value: photo_data
+                } do %>
+      <% @report.photos.each_with_index do |photo, index| %>
+        <article class="photo-card photo-card-clickable">
+          <button type="button"
+                  class="photo-thumb-btn"
+                  data-action="photo-lightbox#open"
+                  data-photo-lightbox-index-param="<%= index %>"
+                  aria-label="Открыть фото: <%= photo.type_label %>">
+            <img src="<%= report_photo_path(photo) %>"
+                 alt="<%= photo.type_label %>"
+                 loading="lazy"
+                 onerror="this.src='<%= j ReportsHelper::PHOTO_PLACEHOLDER %>'">
+          </button>
+          <div class="photo-caption">
+            <strong><%= photo.type_label %></strong>
+            <% if photo.caption.present? %>
+              <div class="text-muted mt-1"><%= photo.caption %></div>
+            <% end %>
+          </div>
+        </article>
+      <% end %>
+
+      <div class="photo-lightbox"
+           data-photo-lightbox-target="overlay"
+           data-action="click->photo-lightbox#closeOnBackdrop">
+        <button type="button" class="photo-lightbox-close" data-action="photo-lightbox#close" aria-label="Закрыть">&times;</button>
+        <% if @report.photos.size > 1 %>
+          <button type="button" class="photo-lightbox-nav photo-lightbox-prev" data-action="photo-lightbox#prev" aria-label="Предыдущее">&#8249;</button>
+          <button type="button" class="photo-lightbox-nav photo-lightbox-next" data-action="photo-lightbox#next" aria-label="Следующее">&#8250;</button>
+        <% end %>
+        <div class="photo-lightbox-content">
+          <div class="photo-lightbox-toolbar">
+            <button type="button" class="photo-lightbox-tool" data-action="photo-lightbox#zoomOut" aria-label="Уменьшить">−</button>
+            <button type="button" class="photo-lightbox-tool photo-lightbox-scale" data-action="photo-lightbox#resetZoom" aria-label="Сбросить масштаб" data-photo-lightbox-target="scaleLabel">100%</button>
+            <button type="button" class="photo-lightbox-tool" data-action="photo-lightbox#zoomIn" aria-label="Увеличить">+</button>
+          </div>
+          <div class="photo-lightbox-viewport"
+               data-photo-lightbox-target="viewport"
+               data-action="wheel->photo-lightbox#wheel">
+            <img data-photo-lightbox-target="image"
+                 src=""
+                 alt=""
+                 draggable="false"
+                 data-action="mousedown->photo-lightbox#startPan dblclick->photo-lightbox#toggleZoom touchstart->photo-lightbox#touchStart touchmove->photo-lightbox#touchMove touchend->photo-lightbox#touchEnd touchcancel->photo-lightbox#touchEnd">
+          </div>
+          <div class="photo-lightbox-meta">
+            <strong data-photo-lightbox-target="title"></strong>
+            <% if @report.photos.size > 1 %>
+              <span class="photo-lightbox-counter" data-photo-lightbox-target="counter"></span>
+            <% end %>
+            <div class="text-white-50 small mt-1" data-photo-lightbox-target="caption"></div>
+            <div class="photo-lightbox-hint">Колёсико мыши, двойной клик или жесты для приближения · перетаскивание для перемещения</div>
+          </div>
+        </div>
+      </div>
+    <% end %>
+  <% else %>
+    <p class="text-muted">Фотографии не приложены.</p>
+  <% end %>
+</div>
+
+<div class="modal fade" id="deletionRequestModal" tabindex="-1" aria-labelledby="deletionRequestModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <%= form_with model: ReportDeletionRequest.new, url: report_report_deletion_requests_path(@report), method: :post do |f| %>
+        <div class="modal-header">
+          <h5 class="modal-title" id="deletionRequestModalLabel">Запрос на удаление отчёта #<%= @report.id %></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Закрыть"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">Запрос будет отправлен администратору. Укажите причину удаления (не менее 10 символов).</p>
+          <%= f.label :reason, "Причина", class: "form-label" %>
+          <%= f.text_area :reason, rows: 4, class: "form-control", required: true, minlength: 10, maxlength: 2000,
+                          placeholder: "Например: дублирует отчёт №…, ошибочная отправка, неверные данные…" %>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Отмена</button>
+          <%= f.submit "Отправить запрос", class: "btn btn-danger" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

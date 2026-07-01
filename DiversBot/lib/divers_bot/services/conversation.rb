@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require 'telegram/bot'
+require 'max_bot_api'
 
 module DiversBot
   module Services
@@ -13,18 +13,19 @@ module DiversBot
       BACK_TEXT = '⬅️ Назад'
       CHANGE_LOCATION_TEXT = '📍 Изменить место'
 
-      def initialize(bot, message)
-        @bot = bot
+      def initialize(client, message)
+        @client = client
         @message = message
         @user = message.from
-        @chat_id = message.chat.id
-        @text = message.text&.strip
         @session = Models::UserSession.find_or_create_for(@user)
+        @chat_id = resolve_chat_id(message)
+        @session.remember_chat_id!(@chat_id) if @chat_id
+        @text = message.text&.strip
         @spam_guard = SpamGuard.new(@user.id)
       end
 
       def handle
-        @session.track_message_id!(@message.message_id)
+        @session.track_message_id!(@message.message_id) if @message.message_id
         return handle_command if command_message?
 
         unless @spam_guard.allow_message?
@@ -72,7 +73,7 @@ module DiversBot
 
       def handle_cancel
         @session.reset!
-        reply(Messages.cancelled, reply_markup: remove_keyboard)
+        reply(Messages.cancelled, reply_markup: start_keyboard)
       end
 
       def dispatch_state
@@ -183,8 +184,6 @@ module DiversBot
         reply(Messages.ask_location_choice, reply_markup: location_choice_keyboard)
       end
 
-      # --- idle ---
-
       def handle_idle
         if start_report_requested?
           unless @spam_guard.allow_new_report?
@@ -198,8 +197,6 @@ module DiversBot
           reply('Нажмите «Начать отчёт» или /start для инструкции.', reply_markup: start_keyboard)
         end
       end
-
-      # --- date ---
 
       def handle_date
         date = parse_date(@text)
@@ -217,17 +214,11 @@ module DiversBot
         reply(Messages.ask_location_choice, reply_markup: location_choice_keyboard)
       end
 
-      # --- location ---
-
       def handle_location_choice
         case @text
         when '📍 Геопозиция', 'Геопозиция'
           @session.transition_to!('waiting_map_location')
           reply(Messages.ask_geolocation, reply_markup: geolocation_keyboard)
-        when '🗺 Карта', '🗺 На карте', 'Карта', 'На карте'
-          @session.transition_to!('waiting_map_location')
-          reply(Messages.ask_map_location, reply_markup: map_location_keyboard)
-          send_map_browser_link
         when '🌐 Координаты', 'Координаты'
           @session.transition_to!('waiting_coordinates')
           reply(Messages.ask_coordinates, reply_markup: location_input_keyboard)
@@ -240,41 +231,13 @@ module DiversBot
       end
 
       def handle_map_location
-        if @text == '🌐 Ввести координаты'
-          @session.transition_to!('waiting_coordinates')
-          reply(Messages.ask_coordinates, reply_markup: location_input_keyboard)
-          return
-        end
-
-        if @message.web_app_data
-          data = JSON.parse(@message.web_app_data.data)
-          save_location('map_point', data['lat'], data['lng'])
-          return
-        end
-
         if @message.location
           loc = @message.location
           save_location('map_point', loc.latitude, loc.longitude)
           return
         end
 
-        if @text && !@text.empty?
-          coords = parse_coordinates(@text)
-          if coords
-            lat, lon = coords
-            if valid_coordinates?(lat, lon)
-              @bot.api.send_location(chat_id: @chat_id, latitude: lat, longitude: lon)
-              save_location('coordinates', lat, lon)
-              reply(Messages.coordinates_confirmed(lat, lon))
-              return
-            end
-          end
-        end
-
-        reply(
-          'Отправьте геопозицию, вставьте координаты из браузера или откройте «🗺 Карта в браузере» в сообщении выше, если мини-приложение не работает.',
-          reply_markup: map_location_keyboard
-        )
+        reply(Messages.ask_geolocation, reply_markup: geolocation_keyboard)
       end
 
       def handle_coordinates
@@ -290,7 +253,7 @@ module DiversBot
           return
         end
 
-        @bot.api.send_location(chat_id: @chat_id, latitude: lat, longitude: lon)
+        send_location(lat, lon)
         save_location('coordinates', lat, lon)
         reply(Messages.coordinates_confirmed(lat, lon))
       end
@@ -317,8 +280,6 @@ module DiversBot
         reply(Messages.ask_encounter_type, reply_markup: encounter_type_keyboard)
       end
 
-      # --- encounter ---
-
       def handle_encounter_type
         case @text
         when '🔹 Единичная встреча', 'Единичная встреча'
@@ -342,8 +303,6 @@ module DiversBot
         @session.transition_to!('waiting_depth', 'encounter_radius_m' => radius)
         reply(Messages.ask_depth, reply_markup: standard_keyboard)
       end
-
-      # --- depth ---
 
       def handle_depth
         depth = parse_positive_float(@text)
@@ -372,8 +331,6 @@ module DiversBot
         reply('Выберите точность глубины с помощью кнопок.', reply_markup: depth_precision_keyboard)
       end
 
-      # --- photos: density ---
-
       def handle_density_photos
         if done_requested?
           photos = density_photos
@@ -388,20 +345,24 @@ module DiversBot
         end
 
         if photo_message?
-          file_id = photo_file_id
-          unless file_id
+          token = photo_attachment_token
+          source_url = @message.photo_attachment_url
+          unless token || source_url
             reply('❌ Не удалось получить файл. Отправьте изображение ещё раз.', reply_markup: done_keyboard)
             return
           end
 
-          @session.append_photo!(file_id: file_id, photo_type: 'density', caption: @message.caption)
+          @session.append_photo!(
+            attachment_token: token.presence || source_url,
+            source_url: source_url,
+            photo_type: 'density',
+            caption: @message.caption
+          )
           reply(Messages.photo_added(density_photos.size), reply_markup: done_keyboard)
         else
           reply(Messages.need_photo, reply_markup: done_keyboard)
         end
       end
-
-      # --- substrate ---
 
       def handle_substrate_type
         return reply('Опишите тип субстрата.', reply_markup: standard_keyboard) if @text.nil? || @text.empty?
@@ -418,21 +379,25 @@ module DiversBot
         end
 
         if photo_message?
-          file_id = photo_file_id
-          unless file_id
+          token = photo_attachment_token
+          source_url = @message.photo_attachment_url
+          unless token || source_url
             reply(Messages.need_photo, reply_markup: skip_keyboard)
             return
           end
 
-          @session.append_photo!(file_id: file_id, photo_type: 'substrate', caption: @message.caption)
+          @session.append_photo!(
+            attachment_token: token.presence || source_url,
+            source_url: source_url,
+            photo_type: 'substrate',
+            caption: @message.caption
+          )
           @session.transition_to!('waiting_additional_info')
           reply(Messages.ask_additional_info, reply_markup: skip_keyboard)
         else
           reply(Messages.need_photo, reply_markup: skip_keyboard)
         end
       end
-
-      # --- additional info ---
 
       def handle_additional_info
         unless skip_requested?
@@ -446,8 +411,6 @@ module DiversBot
         reply(Messages.ask_extra_photos, reply_markup: finish_keyboard)
       end
 
-      # --- extra photos & submit ---
-
       def handle_extra_photos
         if finish_requested?
           submit_report!
@@ -455,13 +418,19 @@ module DiversBot
         end
 
         if photo_message?
-          file_id = photo_file_id
-          unless file_id
+          token = photo_attachment_token
+          source_url = @message.photo_attachment_url
+          unless token || source_url
             reply('❌ Не удалось получить файл. Отправьте изображение ещё раз.', reply_markup: finish_keyboard)
             return
           end
 
-          @session.append_photo!(file_id: file_id, photo_type: 'additional', caption: @message.caption)
+          @session.append_photo!(
+            attachment_token: token.presence || source_url,
+            source_url: source_url,
+            photo_type: 'additional',
+            caption: @message.caption
+          )
           reply(Messages.extra_photo_added(additional_photos.size), reply_markup: finish_keyboard)
         else
           reply('Отправьте фото или нажмите «Завершить отчёт».', reply_markup: finish_keyboard)
@@ -472,7 +441,7 @@ module DiversBot
         draft = @session.draft_data
         report = Models::Report.create_from_draft!(@user, draft)
         @session.reset!
-        reply(Services::ReportSummary.text(report), parse_mode: nil, reply_markup: start_keyboard)
+        reply(Services::ReportSummary.text(report), format: 'markdown', reply_markup: start_keyboard)
         send_report_photos(report)
       end
 
@@ -481,18 +450,18 @@ module DiversBot
         return if photos.empty?
 
         photos.each_with_index do |photo, index|
-          result = @bot.api.send_photo(
-            chat_id: @chat_id,
-            photo: photo.telegram_file_id,
-            caption: Services::ReportSummary.photo_caption(photo, index)
-          )
-          @session.track_message_id!(result.message_id)
+          caption = Services::ReportSummary.photo_caption(photo, index)
+          message = MaxBotApi::Builders::MessageBuilder.new
+                                                       .set_text(caption.to_s)
+                                                       .add_photo_by_token(photo.attachment_token)
+          apply_recipient!(message)
+          result = @client.messages.send_with_result(message)
+          mid = result&.dig(:body, :mid)
+          @session.track_message_id!(mid) if mid
         rescue StandardError => e
           warn "[WARN] Failed to send photo for report ##{report.id}: #{e.message}"
         end
       end
-
-      # --- helpers ---
 
       def draft
         @session.draft_data
@@ -529,15 +498,11 @@ module DiversBot
       end
 
       def photo_message?
-        @message.photo&.any? || @message.document
+        @message.photo_message?
       end
 
-      def photo_file_id
-        if @message.photo&.any?
-          @message.photo.max_by { |p| p.file_size || 0 }.file_id
-        elsif @message.document
-          @message.document.file_id
-        end
+      def photo_attachment_token
+        @message.photo_attachment_token
       end
 
       def density_photos
@@ -550,7 +515,7 @@ module DiversBot
 
       def delete_chat_messages(message_ids)
         message_ids.each do |message_id|
-          @bot.api.delete_message(chat_id: @chat_id, message_id: message_id)
+          @client.messages.delete_message(message_id: message_id.to_s)
         rescue StandardError
           nil
         end
@@ -592,45 +557,71 @@ module DiversBot
         nil
       end
 
-      def reply(text, parse_mode: 'Markdown', **options)
-        payload = {
-          chat_id: @chat_id,
-          text: text,
-          **options
-        }
-        payload[:parse_mode] = parse_mode if parse_mode
+      def reply(text, format: 'markdown', reply_markup: nil)
+        message = MaxBotApi::Builders::MessageBuilder.new
+                                                     .set_text(text)
+        message.set_format(format) if format
+        apply_recipient!(message)
 
-        result = @bot.api.send_message(**payload)
-        @session.track_message_id!(result.message_id)
+        keyboard = reply_markup || standard_keyboard_for_state
+        message.add_keyboard(keyboard) if keyboard
+
+        result = @client.messages.send_with_result(message)
+        mid = result&.dig(:body, :mid)
+        @session.track_message_id!(mid) if mid
         result
       end
 
-      # --- keyboards ---
-
-      def keyboard_button(text)
-        Telegram::Bot::Types::KeyboardButton.new(text: text)
+      def send_location(lat, lon)
+        message = MaxBotApi::Builders::MessageBuilder.new
+                                                     .add_location(lat, lon)
+        apply_recipient!(message)
+        result = @client.messages.send_with_result(message)
+        mid = result&.dig(:body, :mid)
+        @session.track_message_id!(mid) if mid
       end
 
-      def build_keyboard(main_rows, back: true, change_location: false)
-        rows = main_rows.dup
-        nav_row = []
-        nav_row << keyboard_button(BACK_TEXT) if back
-        nav_row << keyboard_button(CHANGE_LOCATION_TEXT) if change_location
-        rows << nav_row if nav_row.any?
-        rows << [keyboard_button('❌ Отмена (/cancel)')]
+      def resolve_chat_id(message)
+        message.chat.id || @session.stored_chat_id
+      end
 
-        Telegram::Bot::Types::ReplyKeyboardMarkup.new(
-          keyboard: rows,
-          resize_keyboard: true
-        )
+      def apply_recipient!(builder)
+        if @chat_id && @chat_id.to_i != 0
+          builder.set_chat(@chat_id)
+        elsif @user.id && @user.id.to_i != 0
+          builder.set_user(@user.id)
+        end
+        builder
+      end
+
+      def standard_keyboard_for_state
+        nil
+      end
+
+      # --- keyboards (MAX inline) ---
+
+      def build_keyboard(main_rows, back: true, change_location: false)
+        kb = @client.messages.new_keyboard_builder
+
+        main_rows.each do |row_texts|
+          row = kb.add_row
+          row_texts.each { |label| row.add_message(label) }
+        end
+
+        nav = []
+        nav << BACK_TEXT if back
+        nav << CHANGE_LOCATION_TEXT if change_location
+        nav << '❌ Отмена (/cancel)'
+
+        row = kb.add_row
+        nav.each { |label| row.add_message(label) }
+        kb
       end
 
       def start_keyboard
-        Telegram::Bot::Types::ReplyKeyboardMarkup.new(
-          keyboard: [[keyboard_button('📝 Начать отчёт')]],
-          resize_keyboard: true,
-          one_time_keyboard: false
-        )
+        kb = @client.messages.new_keyboard_builder
+        kb.add_row.add_message('📝 Начать отчёт')
+        kb
       end
 
       def date_keyboard
@@ -640,10 +631,9 @@ module DiversBot
       def location_choice_keyboard
         build_keyboard(
           [
-            [keyboard_button('📍 Геопозиция')],
-            [keyboard_button('🌐 Координаты')],
-            [keyboard_button('📝 Описание')],
-            [keyboard_button('🗺 Карта')]
+            ['📍 Геопозиция'],
+            ['🌐 Координаты'],
+            ['📝 Описание']
           ],
           back: true,
           change_location: false
@@ -651,78 +641,28 @@ module DiversBot
       end
 
       def geolocation_keyboard
-        build_keyboard(
-          [[Telegram::Bot::Types::KeyboardButton.new(
-            text: '📍 Отправить геопозицию',
-            request_location: true
-          )]],
-          back: true,
-          change_location: false
-        )
+        kb = @client.messages.new_keyboard_builder
+        row = kb.add_row
+        add_geo_button(row, '📍 Отправить геопозицию')
+        row = kb.add_row
+        row.add_message(BACK_TEXT)
+        row.add_message('❌ Отмена (/cancel)')
+        kb
       end
 
       def location_input_keyboard
         build_keyboard([], back: true, change_location: false)
       end
 
-      def map_location_keyboard
-        rows = []
-
-        if web_app_url?
-          rows << [Telegram::Bot::Types::KeyboardButton.new(
-            text: '🗺 Мини-приложение (карта)',
-            web_app: Telegram::Bot::Types::WebAppInfo.new(url: web_app_url)
-          )]
-        end
-
-        rows << [Telegram::Bot::Types::KeyboardButton.new(
-          text: '📍 Отправить геопозицию',
-          request_location: true
-        )]
-        rows << [keyboard_button('🌐 Ввести координаты')]
-
-        build_keyboard(rows, back: true, change_location: false)
-      end
-
-      def web_app_url
-        url = ENV['WEB_APP_URL']
-        return nil if url.nil? || url.strip.empty?
-
-        url.strip
-      end
-
-      def browser_map_url
-        url = web_app_url
-        return nil unless url
-
-        url.include?('?') ? "#{url}&browser=1" : "#{url}?browser=1"
-      end
-
-      def send_map_browser_link
-        url = browser_map_url
-        return unless url
-
-        result = @bot.api.send_message(
-          chat_id: @chat_id,
-          text: Messages.map_browser_hint,
-          parse_mode: 'Markdown',
-          reply_markup: Telegram::Bot::Types::InlineKeyboardMarkup.new(
-            inline_keyboard: [
-              [Telegram::Bot::Types::InlineKeyboardButton.new(
-                text: '🗺 Карта в браузере',
-                url: url
-              )]
-            ]
-          )
-        )
-        @session.track_message_id!(result.message_id)
+      def add_geo_button(row, text)
+        row.add_geolocation(text, true)
       end
 
       def encounter_type_keyboard
         build_keyboard(
           [
-            [keyboard_button('🔹 Единичная встреча')],
-            [keyboard_button('🔸 Множественная встреча')]
+            ['🔹 Единичная встреча'],
+            ['🔸 Множественная встреча']
           ],
           back: true,
           change_location: true
@@ -736,8 +676,8 @@ module DiversBot
       def depth_precision_keyboard
         build_keyboard(
           [
-            [keyboard_button('📐 Приблизительная')],
-            [keyboard_button('🎯 Точная')]
+            ['📐 Приблизительная'],
+            ['🎯 Точная']
           ],
           back: true,
           change_location: true
@@ -745,23 +685,15 @@ module DiversBot
       end
 
       def done_keyboard
-        build_keyboard([[keyboard_button('✅ Готово')]], back: true, change_location: true)
+        build_keyboard([['✅ Готово']], back: true, change_location: true)
       end
 
       def skip_keyboard
-        build_keyboard([[keyboard_button('⏭ Пропустить')]], back: true, change_location: true)
+        build_keyboard([['⏭ Пропустить']], back: true, change_location: true)
       end
 
       def finish_keyboard
-        build_keyboard([[keyboard_button('🏁 Завершить отчёт')]], back: true, change_location: true)
-      end
-
-      def remove_keyboard
-        Telegram::Bot::Types::ReplyKeyboardRemove.new(remove_keyboard: true)
-      end
-
-      def cancel_keyboard
-        standard_keyboard
+        build_keyboard([['🏁 Завершить отчёт']], back: true, change_location: true)
       end
     end
   end

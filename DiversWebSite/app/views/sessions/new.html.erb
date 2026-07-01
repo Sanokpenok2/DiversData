@@ -1,0 +1,20 @@
+<div class="auth-card">
+  <h1>Вход</h1>
+  <p class="text-muted mb-4">Портал учёных — данные об устрицах из бота DiversData</p>
+
+  <%= form_with url: login_path, method: :post do %>
+    <div class="mb-3">
+      <label class="form-label">Email</label>
+      <input type="email" name="email" class="form-control" required autofocus>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Пароль</label>
+      <input type="password" name="password" class="form-control" required>
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Войти</button>
+  <% end %>
+
+  <p class="text-center text-muted small mt-4 mb-0">
+    Нет аккаунта? <%= link_to "Зарегистрироваться по токену", register_path %>
+  </p>
+</div>

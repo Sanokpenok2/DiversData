@@ -24,11 +24,11 @@ module DiversBot
       ].freeze
 
       def self.find_or_create_for(user)
-        record = find(telegram_user_id: user.id)
+        record = find(max_user_id: user.id)
         return record if record
 
         create(
-          telegram_user_id: user.id,
+          max_user_id: user.id,
           state: 'idle',
           data: {},
           created_at: Time.now,
@@ -43,14 +43,15 @@ module DiversBot
         persist!(state: state, data: merged)
       end
 
-      def append_photo!(file_id:, photo_type:, caption: nil)
-        raise ArgumentError, 'file_id required' if file_id.to_s.empty?
+      def append_photo!(attachment_token:, photo_type:, caption: nil, source_url: nil)
+        raise ArgumentError, 'attachment_token required' if attachment_token.to_s.empty?
 
         current = normalize_data(data || {})
         photos = Array(current['photos'])
         photos << {
-          'file_id' => file_id.to_s,
+          'attachment_token' => attachment_token.to_s,
           'photo_type' => photo_type.to_s,
+          'source_url' => source_url&.to_s,
           'caption' => caption
         }.compact
 
@@ -62,7 +63,7 @@ module DiversBot
       def track_message_id!(message_id)
         return unless message_id
 
-        mid = message_id.to_i
+        mid = message_id.to_s
         current = normalize_data(data || {})
         ids = Array(current['chat_message_ids'])
         return if ids.include?(mid)
@@ -70,6 +71,20 @@ module DiversBot
         ids << mid
         current['chat_message_ids'] = ids.last(300)
         persist!(data: current)
+      end
+
+      def remember_chat_id!(chat_id)
+        return unless chat_id
+
+        current = normalize_data(data || {})
+        return if current['max_chat_id'].to_s == chat_id.to_s
+
+        current['max_chat_id'] = chat_id.to_s
+        persist!(data: current)
+      end
+
+      def stored_chat_id
+        draft_data['max_chat_id']
       end
 
       def reset!

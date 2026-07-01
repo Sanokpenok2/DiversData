@@ -1,0 +1,32 @@
+<div class="auth-card">
+  <h1>Регистрация</h1>
+  <p class="text-muted mb-4">Для регистрации нужен токен, выданный администратором</p>
+
+  <%= form_with url: register_path, method: :post do %>
+    <div class="mb-3">
+      <label class="form-label">Токен регистрации</label>
+      <input type="text" name="registration_token" class="form-control" required autofocus>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Имя</label>
+      <input type="text" name="name" class="form-control" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Email</label>
+      <input type="email" name="email" class="form-control" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Пароль</label>
+      <input type="password" name="password" class="form-control" required minlength="8">
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Подтверждение пароля</label>
+      <input type="password" name="password_confirmation" class="form-control" required minlength="8">
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Зарегистрироваться</button>
+  <% end %>
+
+  <p class="text-center text-muted small mt-4 mb-0">
+    Уже есть аккаунт? <%= link_to "Войти", login_path %>
+  </p>
+</div>

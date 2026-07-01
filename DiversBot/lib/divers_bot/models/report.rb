@@ -12,10 +12,10 @@ module DiversBot
 
       def self.create_from_draft!(user, draft)
         report = create(
-          telegram_user_id: user.id,
-          telegram_username: user.username,
-          telegram_first_name: user.first_name,
-          telegram_last_name: user.last_name,
+          max_user_id: user.id,
+          max_username: user.username,
+          max_first_name: user.first_name,
+          max_last_name: user.last_name,
           observation_date: parse_observation_date(draft.fetch('observation_date')),
           location_type: draft.fetch('location_type'),
           latitude: draft['latitude'],
@@ -33,11 +33,20 @@ module DiversBot
         )
 
         Array(draft['photos']).each do |photo|
+          source_url = photo['source_url']
+          storage_path = Services::PhotoStorage.store_from_url(
+            source_url,
+            report_id: report.id,
+            photo_type: photo.fetch('photo_type')
+          )
+
           Models::ReportPhoto.create(
             report_id: report.id,
-            telegram_file_id: photo.fetch('file_id'),
+            attachment_token: photo.fetch('attachment_token'),
             photo_type: photo.fetch('photo_type'),
             caption: photo['caption'],
+            source_url: source_url,
+            storage_path: storage_path,
             created_at: Time.now
           )
         end

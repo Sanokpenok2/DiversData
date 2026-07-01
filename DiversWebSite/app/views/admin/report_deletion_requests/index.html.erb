@@ -1,0 +1,74 @@
+<% content_for :title, "Запросы на удаление" %>
+
+<div class="container py-4">
+  <h1 class="h3 mb-4">Запросы на удаление отчётов</h1>
+
+  <h2 class="h5 mb-3">Ожидают решения (<%= @pending_requests.size %>)</h2>
+
+  <% if @pending_requests.any? %>
+    <div class="vstack gap-3 mb-5">
+      <% @pending_requests.each do |request| %>
+        <div class="report-card">
+          <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+              <strong><%= link_to "Отчёт ##{request.report_id}", report_path(request.report_id), class: "text-decoration-none" %></strong>
+              <div class="small text-muted">
+                Запросил: <%= request.requested_by.name %> · <%= request.created_at.strftime("%d.%m.%Y %H:%M") %>
+              </div>
+            </div>
+            <span class="badge text-bg-warning"><%= request.status_label %></span>
+          </div>
+          <p class="mb-3"><strong>Причина:</strong> <%= simple_format(request.reason, {}, wrapper_tag: "span") %></p>
+          <div class="d-flex flex-wrap gap-2">
+            <%= button_to "Удалить отчёт", approve_admin_report_deletion_request_path(request), method: :patch,
+                          class: "btn btn-danger btn-sm",
+                          form: { data: { turbo_confirm: "Удалить отчёт ##{request.report_id}? Это действие необратимо." } } %>
+            <%= form_with url: reject_admin_report_deletion_request_path(request), method: :patch, class: "d-flex gap-2 flex-grow-1" do |f| %>
+              <%= f.text_field :admin_note, name: "report_deletion_request[admin_note]", class: "form-control form-control-sm",
+                               placeholder: "Комментарий при отклонении (необязательно)" %>
+              <%= f.submit "Отклонить", class: "btn btn-outline-secondary btn-sm" %>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <p class="text-muted mb-5">Нет ожидающих запросов.</p>
+  <% end %>
+
+  <h2 class="h5 mb-3">Недавно обработанные</h2>
+  <% if @processed_requests.any? %>
+    <div class="table-responsive report-card p-0">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Отчёт</th>
+            <th>Статус</th>
+            <th>Кто запросил</th>
+            <th>Причина</th>
+            <th>Решение</th>
+            <th>Дата</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% @processed_requests.each do |request| %>
+            <tr>
+              <td>#<%= request.report_id %></td>
+              <td>
+                <span class="badge <%= request.status == 'approved' ? 'text-bg-danger' : 'text-bg-secondary' %>">
+                  <%= request.status_label %>
+                </span>
+              </td>
+              <td class="small"><%= request.requested_by.name %></td>
+              <td class="small"><%= truncate(request.reason, length: 80) %></td>
+              <td class="small"><%= request.reviewed_by&.name || "—" %><% if request.admin_note.present? %><br><span class="text-muted"><%= request.admin_note %></span><% end %></td>
+              <td class="small"><%= request.reviewed_at&.strftime("%d.%m.%Y %H:%M") || "—" %></td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% else %>
+    <p class="text-muted">История пуста.</p>
+  <% end %>
+</div>

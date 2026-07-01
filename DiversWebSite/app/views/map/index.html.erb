@@ -1,0 +1,89 @@
+<% content_for :title, "Карта наблюдений" %>
+<% content_for :head do %>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css">
+<% end %>
+
+<div class="map-layout" data-controller="map"
+     data-map-reports-url-value="<%= map_reports_path(format: :json) %>"
+     data-map-csrf-token-value="<%= form_authenticity_token %>"
+     data-map-logged-in-value="true">
+  <aside class="map-sidebar">
+    <h1 class="h5 mb-3">Поиск и фильтры</h1>
+    <form action="<%= report_lookup_path %>" method="get" class="mb-4">
+      <label class="form-label">Номер отчёта</label>
+      <div class="input-group input-group-sm">
+        <span class="input-group-text">#</span>
+        <input type="number" name="id" min="1" class="form-control" placeholder="123" value="<%= @filters[:report_id].presence %>">
+        <button type="submit" class="btn btn-primary">Найти</button>
+      </div>
+      <div class="form-text">Введите номер, который передал дайвер</div>
+    </form>
+    <h2 class="h6 mb-3">Фильтры карты</h2>
+    <form data-map-target="filters" data-action="submit->map#applyFilters change->map#applyFilters">
+      <div class="mb-3">
+        <label class="form-label">Номер на карте</label>
+        <input type="number" name="report_id" min="1" class="form-control form-control-sm" value="<%= @filters[:report_id] %>">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Дата от</label>
+        <input type="date" name="date_from" class="form-control form-control-sm" value="<%= @filters[:date_from] %>">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Дата до</label>
+        <input type="date" name="date_to" class="form-control form-control-sm" value="<%= @filters[:date_to] %>">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Тип встречи</label>
+        <select name="encounter_type" class="form-select form-select-sm">
+          <option value="">Все</option>
+          <option value="single">Единичная</option>
+          <option value="multiple_in_radius">Множественная</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Способ указания места</label>
+        <select name="location_type" class="form-select form-select-sm">
+          <option value="">Все</option>
+          <option value="map_point">Точка на карте</option>
+          <option value="coordinates">Координаты</option>
+        </select>
+      </div>
+      <div class="row g-2 mb-3">
+        <div class="col-6">
+          <label class="form-label">Глубина от, м</label>
+          <input type="number" step="0.1" min="0" name="depth_min" class="form-control form-control-sm">
+        </div>
+        <div class="col-6">
+          <label class="form-label">Глубина до, м</label>
+          <input type="number" step="0.1" min="0" name="depth_max" class="form-control form-control-sm">
+        </div>
+      </div>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="favorites_only" value="1" id="favoritesOnly">
+        <label class="form-check-label" for="favoritesOnly">Только избранное</label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm w-100">Применить</button>
+      <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2" data-action="map#resetFilters">Сбросить</button>
+    </form>
+    <p class="text-muted small mt-3 mb-0" data-map-target="counter">Загрузка точек...</p>
+  </aside>
+
+  <section class="map-container">
+    <div id="observations-map" data-map-target="canvas"></div>
+    <div class="map-popup" data-map-target="popup">
+      <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+        <h2 class="h6 mb-0" data-map-target="popupTitle">Отчёт</h2>
+        <button type="button" class="btn-close" data-action="map#closePopup" aria-label="Закрыть"></button>
+      </div>
+      <div data-map-target="popupBody" class="small text-secondary mb-3"></div>
+      <div class="d-flex gap-2 flex-wrap">
+        <a href="#" class="btn btn-primary btn-sm" data-map-target="popupLink">Подробнее</a>
+        <button type="button" class="btn btn-outline-warning btn-sm" data-map-target="favoriteBtn" data-action="map#toggleFavorite">
+          <i class="bi bi-star"></i> <span data-map-target="favoriteLabel">В избранное</span>
+        </button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>

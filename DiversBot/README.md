@@ -1,16 +1,16 @@
-# DiversBot — Telegram-бот для сбора данных об устрицах
+# DiversBot — бот MAX для сбора данных об устрицах
 
-Telegram-бот на Ruby для дайверов: сбор наблюдений об устрицах с фотографиями и сохранение в PostgreSQL. Данные предназначены для последующего просмотра учёными через веб-сайт (в разработке).
+Чат-бот на Ruby для мессенджера [MAX](https://max.ru): сбор наблюдений об устрицах от дайверов с фотографиями и сохранение в PostgreSQL. Данные предназначены для последующего просмотра учёными через веб-сайт (в разработке).
 
 ## Возможности
 
 - Пошаговый диалог с инструкцией при `/start`
 - Сбор даты наблюдения, места, типа встречи, глубины, фото и описания субстрата
 - Три способа указания места:
-  - **Интерактивная карта** (Telegram Web App + Leaflet/OpenStreetMap)
+  - **Интерактивная карта** (мини-приложение MAX + OpenLayers)
   - **Координаты** вручную с проверкой точки на карте
   - **Текстовое описание** акватории
-- Загрузка фото плотности поселения, субстрата и дополнительных снимков с подписями
+- Загрузка фото плотности поселения, субстрата и дополнительных снимков
 - Защита от спама (лимит сообщений в минуту, дневной лимит отчётов, cooldown)
 - Хранение данных в PostgreSQL для интеграции с сайтом
 
@@ -18,8 +18,8 @@ Telegram-бот на Ruby для дайверов: сбор наблюдений
 
 - Ruby >= 3.2
 - PostgreSQL >= 13
-- Токен Telegram-бота от [@BotFather](https://t.me/BotFather)
-- HTTPS-хостинг для Web App карты (опционально, для выбора точки на карте)
+- Токен чат-бота MAX ([platform.max.ru](https://platform.max.ru))
+- HTTPS-хостинг для мини-приложения карты (опционально)
 
 ## Быстрый старт
 
@@ -32,15 +32,11 @@ bundle install
 
 ### 2. База данных
 
-Создайте базу PostgreSQL:
-
 ```sql
 CREATE DATABASE divers_data;
 ```
 
 ### 3. Конфигурация
-
-Скопируйте пример конфигурации и заполните значения:
 
 ```bash
 cp .env.example .env
@@ -48,11 +44,12 @@ cp .env.example .env
 
 | Переменная | Описание |
 |---|---|
-| `TELEGRAM_BOT_TOKEN` | Токен бота от BotFather |
+| `MAX_BOT_TOKEN` | Токен бота из кабинета MAX для партнёров |
+| `MAX_API_BASE_URL` | URL API (по умолчанию `https://platform-api2.max.ru/`) |
 | `DATABASE_URL` | Строка подключения PostgreSQL |
-| `WEB_APP_URL` | HTTPS-URL файла `web/map_picker.html` (необязательно) |
+| `WEB_APP_URL` | HTTPS-URL карты (необязательно) |
 | `SPAM_MAX_MESSAGES_PER_MINUTE` | Лимит сообщений в минуту (по умолчанию 20) |
-| `SPAM_MAX_REPORTS_PER_DAY` | Лимит отчётов в сутки на пользователя (по умолчанию 10) |
+| `SPAM_MAX_REPORTS_PER_DAY` | Лимит отчётов в сутки (по умолчанию 10) |
 | `SPAM_COOLDOWN_SECONDS` | Минимальный интервал между сообщениями (по умолчанию 1) |
 
 ### 4. Миграции
@@ -63,124 +60,81 @@ bundle exec rake db:migrate
 ruby db/migrate.rb
 ```
 
+Если база была создана для Telegram-версии, миграция `002_rename_for_max.rb` переименует колонки автоматически.
+
 ### 5. Запуск бота
 
 ```bash
 ruby bin/bot
 ```
 
-Бот работает в режиме long polling. Для production рекомендуется запуск через systemd, Docker или аналогичный процесс-менеджер.
+Бот работает в режиме long polling (удобно для разработки). Для production MAX рекомендует [webhook](https://dev.max.ru/docs-api/methods/POST/subscriptions).
 
-## Web App для карты
+## Мини-приложение для карты
 
-Файл `web/map_picker.html` — мини-приложение Telegram для ручного выбора точки на карте.
+Файл `web/map_picker.html` — мини-приложение MAX для выбора точки на карте (регион: Крым, Чёрное и Азовское море).
 
-**Требования Telegram:** URL должен быть доступен по HTTPS.
+**Требования:** URL должен быть доступен по HTTPS. Подключите мини-приложение в настройках бота на [platform.max.ru](https://platform.max.ru).
 
-### Варианты размещения
+### Размещение
 
-1. **Статический хостинг** (GitHub Pages, Netlify, Vercel и т.п.) — загрузите `web/map_picker.html`
-2. **Локально для теста** — используйте ngrok или cloudflared:
+- **GitHub Pages:** скопируйте `docs/index.html` в репозиторий и укажите `WEB_APP_URL`
+- **Локально:** любой HTTPS-хостинг статики
 
-```bash
-# Пример с Python
-cd web
-python -m http.server 8080
+Режим браузера (`?browser=1`) — для копирования координат, если мини-приложение недоступно.
 
-# В другом терминале (ngrok)
-ngrok http 8080
-```
+## Схема БД
 
-Укажите полученный HTTPS-URL в `.env`:
+### `user_sessions`
 
-```
-WEB_APP_URL=https://xxxx.ngrok.io/map_picker.html
-```
-
-Если `WEB_APP_URL` не задан, бот предложит только отправку текущей геопозиции (кнопка «Отправить геопозицию»).
-
-## Сценарий работы бота
-
-```
-/start → Инструкция → «Начать отчёт»
-  → Дата наблюдения (ДД.ММ.ГГГГ)
-  → Способ указания места (карта / координаты / описание)
-  → Тип встречи (единичная / множественная + радиус)
-  → Глубина + точность (приблизительная / точная)
-  → Фото плотности поселения (мин. 1) → «Готово»
-  → Тип субстрата → фото субстрата (опционально)
-  → Доп. информация (опционально)
-  → Доп. фото с подписями (опционально) → «Завершить отчёт»
-  → Сохранение в БД
-```
-
-Команды:
-- `/start` — инструкция и начало
-- `/cancel` — отмена текущего отчёта
-- `/help` — показать инструкцию
-
-## Структура базы данных
-
-### `reports` — основные отчёты
-
-| Поле | Тип | Описание |
+| Колонка | Тип | Описание |
 |---|---|---|
+| `max_user_id` | bigint | ID пользователя MAX |
+| `state` | string | Текущий шаг диалога |
+| `data` | jsonb | Черновик отчёта и ID сообщений |
+
+### `reports`
+
+| Колонка | Тип | Описание |
+|---|---|---|
+| `max_user_id` | bigint | ID пользователя MAX |
 | `observation_date` | date | Дата наблюдения |
 | `location_type` | string | `map_point`, `coordinates`, `text_description` |
-| `latitude`, `longitude` | float | Координаты (если указаны) |
-| `location_description` | text | Текстовое описание места |
+| `latitude`, `longitude` | float | Координаты |
 | `encounter_type` | string | `single` или `multiple_in_radius` |
-| `encounter_radius_m` | float | Радиус (для множественной встречи) |
 | `depth_m` | float | Глубина в метрах |
-| `depth_is_approximate` | boolean | Приблизительная / точная |
-| `substrate_type` | text | Тип субстрата |
-| `additional_info` | text | Дополнительная информация |
-| `telegram_user_id` | bigint | ID пользователя Telegram |
+| `substrate_type` | text | Описание субстрата |
 
-### `report_photos` — фотографии
+### `report_photos`
 
-| Поле | Тип | Описание |
+| Колонка | Тип | Описание |
 |---|---|---|
-| `report_id` | FK | Связь с отчётом |
-| `telegram_file_id` | string | ID файла в Telegram |
+| `attachment_token` | string | Токен вложения MAX для повторной отправки |
 | `photo_type` | string | `density`, `substrate`, `additional` |
-| `caption` | text | Подпись (для доп. фото) |
-
-### `user_sessions` — состояние диалога
-
-Хранит текущий шаг и промежуточные данные (JSONB) для каждого пользователя.
 
 ## Структура проекта
 
 ```
 DiversBot/
 ├── bin/bot                  # Точка входа
-├── config/boot.rb           # Загрузка зависимостей
-├── db/
-│   ├── migrate.rb
-│   └── migrations/
+├── config/boot.rb           # Загрузка окружения
+├── db/migrations/           # Миграции Sequel
 ├── lib/divers_bot/
-│   ├── bot.rb               # Запуск Telegram-клиента
-│   ├── database.rb
-│   ├── models/              # Report, ReportPhoto, UserSession
-│   └── services/
-│       ├── conversation.rb  # Логика диалога
-│       ├── messages.rb      # Тексты сообщений
-│       └── spam_guard.rb    # Защита от спама
-├── web/map_picker.html      # Web App для карты
-├── .env.example
-├── Gemfile
-└── README.md
+│   ├── bot.rb               # Long polling MAX API
+│   ├── messenger/           # Парсинг входящих обновлений
+│   ├── models/              # UserSession, Report, ReportPhoto
+│   └── services/            # Диалог, тексты, сводка
+└── web/map_picker.html      # Карта для мини-приложения
 ```
 
-## Дальнейшее развитие
+## API MAX
 
-- [ ] Модерация отчётов
-- [ ] Примеры фотографий в инструкции
-- [ ] Webhook вместо long polling для production
-- [ ] Интеграция с сайтом DiversWebSite
-- [ ] Скачивание и хранение фото на диск/S3 (сейчас хранится `file_id` Telegram)
+- Документация: [dev.max.ru/docs-api](https://dev.max.ru/docs-api)
+- Ruby-клиент: [max_bot_api](https://rubygems.org/gems/max_bot_api)
+- MAX Bridge (мини-приложения): [dev.max.ru/docs/webapps/bridge](https://dev.max.ru/docs/webapps/bridge)
 
-## Лицензия
+## TODO
 
-Внутренний проект DiversData.
+- [ ] Webhook-режим для production (Rack/Sinatra)
+- [ ] Скачивание и хранение фото на диск/S3 (сейчас хранится токен MAX)
+- [ ] Веб-сайт для просмотра данных учёными
